@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     llm_max_content_chars: int = 12_000
     concurrency: int = 5
     max_retries: int = 3
+    mdfm_lang: str = "en"
 
 
 settings = Settings()

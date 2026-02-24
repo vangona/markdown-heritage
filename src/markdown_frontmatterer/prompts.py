@@ -20,7 +20,8 @@ Rules:
 - tags: lowercase, hyphenated (e.g. "web-scraping"), 3-7 tags
 - category: choose the single best fit
 - doc_type: choose the single best fit
-- summary: concise, in the same language as the document
+- title, summary, entities, related_topics: use the same language as the document
+- summary: concise, 1-2 sentences
 - entities: extract notable people, organizations, technologies, places mentioned
 - related_topics: broader themes this document relates to, 2-5 topics
 - Return ONLY valid JSON, no markdown fences, no extra text

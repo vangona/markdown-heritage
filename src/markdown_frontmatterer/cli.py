@@ -14,6 +14,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 from rich.table import Table
 
 from markdown_frontmatterer.config import Settings
+from markdown_frontmatterer.frontmatter_io import has_frontmatter
 from markdown_frontmatterer.i18n import set_lang, t
 from markdown_frontmatterer.processor import process_directory, BatchResult
 from markdown_frontmatterer.scanner import scan_markdown_files
@@ -138,11 +139,20 @@ def _run_with_progress(
     dry_run: bool,
     model: str | None,
     yes: bool,
+    skip_existing: bool = False,
     files: list[Path] | None = None,
 ) -> BatchResult:
     """Run the async processor with a Rich progress bar."""
     if files is None:
         files = scan_markdown_files(root)
+
+    if skip_existing:
+        before = len(files)
+        files = [f for f in files if not has_frontmatter(f)]
+        skipped = before - len(files)
+        if skipped:
+            console.print(t("skipped_existing", count=skipped))
+
     total = len(files)
 
     if total == 0:
@@ -238,6 +248,10 @@ def process(
         bool,
         typer.Option("--yes", "-y", help=t("opt_yes")),
     ] = False,
+    skip_existing: Annotated[
+        bool,
+        typer.Option("--skip-existing", "-s", help=t("opt_skip_existing")),
+    ] = False,
 ) -> None:
     """Process Markdown files and generate YAML frontmatter using AI."""
     if not path.exists():
@@ -268,6 +282,7 @@ def process(
         dry_run=dry_run,
         model=model or settings.llm_model,
         yes=yes,
+        skip_existing=skip_existing,
         files=files,
     )
 

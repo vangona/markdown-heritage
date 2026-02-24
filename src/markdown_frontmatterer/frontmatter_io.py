@@ -10,6 +10,12 @@ import frontmatter
 from markdown_frontmatterer.models import Frontmatter
 
 
+def has_frontmatter(path: Path) -> bool:
+    """Return True if the file already contains YAML frontmatter."""
+    post = frontmatter.load(str(path))
+    return bool(post.metadata)
+
+
 def load_frontmatter(path: Path) -> tuple[dict[str, Any], str]:
     """Return (existing metadata dict, body content) from a Markdown file."""
     post = frontmatter.load(str(path))

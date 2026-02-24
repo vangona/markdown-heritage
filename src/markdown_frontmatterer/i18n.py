@@ -132,6 +132,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Skip confirmation prompt.",
         "ko": "확인 프롬프트를 건너뜁니다.",
     },
+    "opt_skip_existing": {
+        "en": "Skip files that already have frontmatter.",
+        "ko": "이미 frontmatter가 있는 파일을 건너뜁니다.",
+    },
+    "skipped_existing": {
+        "en": "Skipped [bold]{count}[/bold] file(s) with existing frontmatter",
+        "ko": "이미 frontmatter가 있는 파일 [bold]{count}[/bold]개를 건너뛰었습니다",
+    },
     # ── errors ──────────────────────────────────────────────────
     "err_not_dir": {
         "en": "Error: {path} is not a directory.",

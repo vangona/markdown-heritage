@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 _RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 _MAX_VALIDATION_RETRIES = 2
+_DEFAULT_MAX_TOKENS = 4096
 
 
 class LLMClient:
@@ -42,16 +43,19 @@ class LLMClient:
     async def analyze(self, content: str, *, model: str | None = None) -> Frontmatter:
         """Send document content to LLM and return parsed Frontmatter.
 
-        Retries up to _MAX_VALIDATION_RETRIES times on JSON/validation errors,
-        feeding the error back to the LLM for self-correction.
+        Retries up to _MAX_VALIDATION_RETRIES times on JSON/validation errors.
+        Distinguishes truncation (finish_reason=length) from validation errors:
+        - Truncation: retry with original messages (adding feedback would worsen it)
+        - Validation: feed error back to LLM for self-correction
         """
         model = model or self._settings.llm_model
         user_prompt = build_user_prompt(content, max_chars=self._settings.llm_max_content_chars)
 
-        messages: list[dict[str, str]] = [
+        base_messages: list[dict[str, str]] = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ]
+        messages = base_messages
 
         last_exc: Exception | None = None
         for attempt in range(_MAX_VALIDATION_RETRIES + 1):
@@ -60,37 +64,48 @@ class LLMClient:
                 "messages": messages,
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1,
-                "max_tokens": 1024,
+                "max_tokens": _DEFAULT_MAX_TOKENS,
             }
 
             async with self._semaphore:
                 data = await self._request_with_retry(payload)
 
             raw_text = data["choices"][0]["message"]["content"]
+            finish_reason = data["choices"][0].get("finish_reason")
 
             try:
                 return Frontmatter.model_validate_json(raw_text)
             except (ValidationError, json.JSONDecodeError) as exc:
                 last_exc = exc
                 if attempt < _MAX_VALIDATION_RETRIES:
-                    logger.warning(
-                        "Validation failed (attempt %d/%d): %s",
-                        attempt + 1,
-                        _MAX_VALIDATION_RETRIES + 1,
-                        exc,
-                    )
-                    messages = [
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                        {"role": "assistant", "content": raw_text},
-                        {
-                            "role": "user",
-                            "content": (
-                                f"Your previous response caused an error:\n{exc}\n\n"
-                                "Please return a corrected, complete JSON object."
-                            ),
-                        },
-                    ]
+                    if finish_reason == "length":
+                        # Truncated — retry with original messages; adding the
+                        # broken response would only increase input and worsen it.
+                        logger.warning(
+                            "Response truncated (attempt %d/%d), retrying",
+                            attempt + 1,
+                            _MAX_VALIDATION_RETRIES + 1,
+                        )
+                        messages = base_messages
+                    else:
+                        # Model finished but output is invalid — feed error back
+                        logger.warning(
+                            "Validation failed (attempt %d/%d): %s",
+                            attempt + 1,
+                            _MAX_VALIDATION_RETRIES + 1,
+                            exc,
+                        )
+                        messages = [
+                            *base_messages,
+                            {"role": "assistant", "content": raw_text},
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"Your previous response caused an error:\n{exc}\n\n"
+                                    "Please return a corrected, complete JSON object."
+                                ),
+                            },
+                        ]
 
         raise ValueError(
             f"LLM returned invalid output after {_MAX_VALIDATION_RETRIES + 1} attempts"

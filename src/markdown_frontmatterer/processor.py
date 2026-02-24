@@ -93,8 +93,14 @@ async def process_file(
             save_frontmatter(path, merged, body)
 
         return ProcessResult(path=path, success=True)
+    except ValueError as exc:
+        logger.error("Validation failed for %s after retries: %s", path, exc)
+        return ProcessResult(path=path, success=False, error=str(exc))
+    except RuntimeError as exc:
+        logger.error("HTTP request failed for %s after retries: %s", path, exc)
+        return ProcessResult(path=path, success=False, error=str(exc))
     except Exception as exc:
-        logger.error("Failed to process %s: %s", path, exc)
+        logger.error("Unexpected error processing %s: %s", path, exc)
         return ProcessResult(path=path, success=False, error=str(exc))
 
 
@@ -106,9 +112,11 @@ async def process_directory(
     dry_run: bool = False,
     model: str | None = None,
     progress_callback: object | None = None,
+    files: list[Path] | None = None,
 ) -> BatchResult:
-    """Process all Markdown files in a directory."""
-    files = scan_markdown_files(root)
+    """Process Markdown files. Uses *files* if given, otherwise scans *root*."""
+    if files is None:
+        files = scan_markdown_files(root)
     batch = BatchResult()
 
     async with LLMClient(settings) as client:

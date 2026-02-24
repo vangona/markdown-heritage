@@ -1,3 +1,43 @@
+---
+category: technology
+created_at: '2026-02-25T00:01:14+09:00'
+doc_type: tutorial
+entities:
+- name: OpenRouter
+  type: organization
+- name: OpenAI
+  type: organization
+- name: Ollama
+  type: organization
+- name: FastAPI
+  type: technology
+- name: Typer
+  type: technology
+- name: Rich
+  type: technology
+- name: httpx
+  type: technology
+- name: Pydantic
+  type: technology
+related_topics:
+- metadata generation
+- command-line interface
+- large language models
+- document management
+- python development
+summary: markdown-frontmatterer는 마크다운 파일에 AI 기반 YAML frontmatter를 자동 생성하는 CLI 도구입니다.
+  다양한 마크다운 기록을 스캔하여 제목, 태그, 카테고리, 요약, 엔티티, 관련 주제 등의 메타데이터를 생성합니다.
+tags:
+- cli
+- ai
+- yaml
+- frontmatter
+- markdown
+- automation
+title: markdown-frontmatterer
+updated_at: '2026-02-24T16:27:48.072187Z'
+---
+
 # markdown-frontmatterer
 
 마크다운 파일에 AI 기반 YAML frontmatter를 자동 생성하는 CLI 도구.
@@ -53,6 +93,9 @@ LLM_BASE_URL=https://openrouter.ai/api/v1
 
 # 선택 — 사용할 모델 (기본: google/gemini-flash-1.5)
 LLM_MODEL=google/gemini-flash-1.5
+
+# 선택 — CLI 출력 언어 (en / ko, 기본: en)
+MDFM_LANG=en
 ```
 
 ### 환경변수 설정 전체 목록
@@ -65,6 +108,7 @@ LLM_MODEL=google/gemini-flash-1.5
 | `LLM_MAX_CONTENT_CHARS` | `12000` | LLM에 전송할 문서 최대 글자 수 |
 | `CONCURRENCY` | `5` | 동시 LLM 요청 수 |
 | `MAX_RETRIES` | `3` | 429 에러 시 재시도 횟수 |
+| `MDFM_LANG` | `en` | CLI 출력 언어 (`en` / `ko`) |
 
 `.env` 파일 대신 환경변수로 직접 설정해도 된다:
 
@@ -145,6 +189,24 @@ mdfm process ./my-notes --model "openai/gpt-4o-mini"
 mdfm process ./my-notes -m "openai/gpt-4o-mini"
 ```
 
+### 언어 설정 (한글 / 영어)
+
+CLI 출력 언어를 한글로 변경할 수 있다. 환경변수 또는 `--lang` 옵션을 사용한다:
+
+```bash
+# 환경변수로 한글 설정
+MDFM_LANG=ko mdfm process ./my-notes
+
+# --lang 옵션으로 한글 설정
+mdfm --lang ko process ./my-notes
+
+# 도움말도 한글로 표시
+MDFM_LANG=ko mdfm --help
+MDFM_LANG=ko mdfm process --help
+```
+
+> `--lang` 옵션은 실행 중 메시지(에러, 진행률, 결과)에 적용된다. `--help` 텍스트까지 한글로 보려면 `MDFM_LANG=ko` 환경변수를 사용해야 한다.
+
 ### 옵션 조합
 
 ```bash
@@ -153,6 +215,9 @@ mdfm process ./my-notes -n -m "openai/gpt-4o-mini"
 
 # 강제 덮어쓰기 + 높은 동시성
 mdfm process ./my-notes -f -c 20
+
+# 한글 출력 + 미리보기
+mdfm --lang ko process ./my-notes -n
 ```
 
 ### CLI 옵션 요약
@@ -163,6 +228,7 @@ mdfm process ./my-notes -f -c 20
 | `--dry-run` | `-n` | off | 파일 수정 없이 미리보기 |
 | `--concurrency` | `-c` | 5 | 동시 LLM 요청 수 |
 | `--model` | `-m` | .env 설정값 | 사용할 LLM 모델 |
+| `--lang` | — | `en` | CLI 출력 언어 (`en` / `ko`), 글로벌 옵션 |
 
 ## 생성되는 Frontmatter
 
@@ -223,6 +289,7 @@ pytest -v
 src/markdown_frontmatterer/
 ├── cli.py              # Typer CLI (mdfm process 커맨드)
 ├── config.py           # pydantic-settings 환경 설정
+├── i18n.py             # 다국어 지원 (en/ko 번역)
 ├── models.py           # Frontmatter/Entity Pydantic 모델
 ├── scanner.py          # .md 파일 재귀 탐색
 ├── frontmatter_io.py   # frontmatter 읽기/병합/쓰기

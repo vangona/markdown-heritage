@@ -140,6 +140,83 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Skipped [bold]{count}[/bold] file(s) with existing frontmatter",
         "ko": "이미 frontmatter가 있는 파일 [bold]{count}[/bold]개를 건너뛰었습니다",
     },
+    # ── query command ────────────────────────────────────────────
+    "cmd_query_help": {
+        "en": "Query and analyse a document collection using frontmatter metadata.",
+        "ko": "frontmatter 메타데이터를 활용하여 문서 컬렉션을 조회/분석합니다.",
+    },
+    "arg_query_path": {
+        "en": "Directory of Markdown files to query.",
+        "ko": "조회할 마크다운 파일 디렉터리.",
+    },
+    "arg_query_prompt": {
+        "en": "Question or instruction for the AI.",
+        "ko": "AI에게 보낼 질문 또는 지시.",
+    },
+    "opt_max_docs": {
+        "en": "Max documents to read in full.",
+        "ko": "전체 읽기할 최대 문서 수.",
+    },
+    "opt_output": {
+        "en": "Output file path for the result.",
+        "ko": "결과 저장 파일 경로.",
+    },
+    "opt_no_save": {
+        "en": "Don't save result to file.",
+        "ko": "결과를 파일에 저장하지 않습니다.",
+    },
+    "query_scanning": {
+        "en": "Scanning markdown files...",
+        "ko": "마크다운 파일 스캔 중...",
+    },
+    "query_api_calls_note": {
+        "en": "This will make 2 API calls (select + analyse).",
+        "ko": "API 호출 2회 (선별 + 분석) 를 수행합니다.",
+    },
+    "query_building_catalog": {
+        "en": "Building document catalog...",
+        "ko": "문서 카탈로그 구축 중...",
+    },
+    "query_selecting_docs": {
+        "en": "AI is selecting relevant documents...",
+        "ko": "AI가 관련 문서를 선별하는 중...",
+    },
+    "query_analyzing": {
+        "en": "Analysing {count} selected documents...",
+        "ko": "선별된 {count}개 문서 분석 중...",
+    },
+    "query_done": {
+        "en": "Query complete.",
+        "ko": "조회 완료.",
+    },
+    "query_result_title": {
+        "en": "Analysis Result",
+        "ko": "분석 결과",
+    },
+    "query_sources_title": {
+        "en": "References",
+        "ko": "참조 문서",
+    },
+    "query_col_relevance": {
+        "en": "Relevance",
+        "ko": "관련성",
+    },
+    "query_stats": {
+        "en": "Scanned {total} files | {with_fm} with frontmatter | Read {read} in full | ~{cat_tokens:,} catalog tokens | ~{analysis_tokens:,} analysis tokens",
+        "ko": "총 {total}개 스캔 | frontmatter {with_fm}개 | 전체 읽기 {read}개 | 카탈로그 ~{cat_tokens:,} 토큰 | 분석 ~{analysis_tokens:,} 토큰",
+    },
+    "query_saved": {
+        "en": "Saved to: {path}",
+        "ko": "저장됨: {path}",
+    },
+    "query_found_files": {
+        "en": "Found [bold]{count}[/bold] Markdown file(s) in [cyan]{root}[/cyan]",
+        "ko": "[cyan]{root}[/cyan] 에서 마크다운 파일 [bold]{count}[/bold]개를 찾았습니다",
+    },
+    "query_no_files": {
+        "en": "No .md files found in the directory.",
+        "ko": "디렉터리에서 .md 파일을 찾을 수 없습니다.",
+    },
     # ── errors ──────────────────────────────────────────────────
     "err_not_dir": {
         "en": "Error: {path} is not a directory.",

@@ -9,8 +9,6 @@ entities:
   type: organization
 - name: Ollama
   type: organization
-- name: FastAPI
-  type: technology
 - name: Typer
   type: technology
 - name: Rich
@@ -24,29 +22,67 @@ related_topics:
 - command-line interface
 - large language models
 - document management
-- python development
-summary: markdown-frontmatterer는 마크다운 파일에 AI 기반 YAML frontmatter를 자동 생성하는 CLI 도구입니다.
-  다양한 마크다운 기록을 스캔하여 제목, 태그, 카테고리, 요약, 엔티티, 관련 주제 등의 메타데이터를 생성합니다.
+- personal knowledge management
+summary: mdh(markdown heritage)는 마크다운에 담긴 기록을 AI로 정리하고 분석하는 CLI 도구입니다.
 tags:
 - cli
 - ai
 - yaml
 - frontmatter
 - markdown
-- automation
-title: markdown-frontmatterer
-updated_at: '2026-02-24T16:27:48.072187Z'
+- knowledge-management
+title: mdh — markdown heritage
+updated_at: '2026-02-26T00:00:00Z'
 ---
 
-# markdown-frontmatterer
+# mdh — markdown heritage
 
-마크다운 파일에 AI 기반 YAML frontmatter를 자동 생성하는 CLI 도구.
+마크다운에 담긴 기록을 AI로 **정리**하고 **분석**하는 CLI 도구.
 
-일기, 노트, 위키, 회의록 등 다양한 마크다운 기록을 스캔하여 제목, 태그, 카테고리, 요약, 엔티티, 관련 주제 등의 메타데이터를 생성한다. 향후 의미 기반 + 키워드 기반 검색의 기반 데이터로 활용할 수 있다.
+일기, 노트, 위키, 회의록, 에세이 — 누군가의 생각과 경험은 마크다운 파일 속에 쌓인다. `mdh`는 이 기록에 구조를 부여하고, 흩어진 문서들 사이에서 맥락을 찾아낸다.
+
+```
+mdh process ./my-notes      # 기록에 메타데이터를 입힌다
+mdh query ./my-notes "AI 관련 문서를 정리해줘"  # 기록을 분석한다
+```
+
+## 동작 방식
+
+### `mdh process` — 기록 정리
+
+마크다운 파일을 스캔하여 AI가 YAML frontmatter 메타데이터를 자동 생성한다. 제목, 태그, 카테고리, 요약, 엔티티, 관련 주제 등을 추출하여 각 문서에 구조를 부여한다.
+
+```bash
+mdh process ./my-notes           # 기본: 없는 필드만 추가
+mdh process ./my-notes -f        # 강제: 모든 필드 덮어쓰기
+mdh process ./my-notes -s -y     # 이미 처리된 파일 건너뛰기
+```
+
+### `mdh query` — 기록 분석
+
+frontmatter 메타데이터를 활용한 2단계 분석. 모든 문서의 메타데이터를 먼저 훑어 관련 문서를 선별한 뒤, 선별된 문서만 전체 읽어 LLM에 보낸다. 문서가 1000개여도 API 호출은 2회.
+
+```bash
+mdh query ./my-notes                              # 컬렉션 전체 요약
+mdh query ./my-notes "최근 프로젝트 진행상황은?"    # 특정 질의
+mdh query ./my-notes --max-docs 5                  # 읽을 문서 수 제한
+mdh query ./my-notes -o result.md                  # 결과 저장 경로 지정
+mdh query ./my-notes --no-save                     # 터미널 출력만
+```
+
+**분석 흐름:**
+```
+Phase 1 — 카탈로그 구축 (LLM 0회)
+  모든 .md 파일의 frontmatter만 읽어 메타데이터 목록 생성
+
+Phase 2a — 문서 선별 (LLM 1회)
+  카탈로그 + 질의 → 관련 문서 선택
+
+Phase 2b — 분석/답변 (LLM 1회)
+  선별된 문서 전문 + 질의 → 분석 결과 생성
+```
 
 ## 설치
-
-### 1. 저장소 클론 및 가상환경 생성
 
 ```bash
 git clone <repo-url>
@@ -54,24 +90,11 @@ cd markdown-frontmatterer
 
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-```
 
-### 2. 패키지 설치
+pip install -e .            # 기본 설치
+pip install -e ".[dev]"     # 개발 의존성 포함
 
-```bash
-# 기본 설치
-pip install -e .
-
-# 개발 의존성 포함 (pytest, ruff 등)
-pip install -e ".[dev]"
-```
-
-> 반드시 가상환경 안에서 설치해야 시스템 패키지와의 충돌을 피할 수 있다.
-
-### 3. 설치 확인
-
-```bash
-mdfm --help
+mdh --help                  # 설치 확인
 ```
 
 ## 설정
@@ -98,7 +121,7 @@ LLM_MODEL=google/gemini-flash-1.5
 MDFM_LANG=en
 ```
 
-### 환경변수 설정 전체 목록
+### 환경변수 전체 목록
 
 | 환경변수 | 기본값 | 설명 |
 |----------|--------|------|
@@ -114,10 +137,10 @@ MDFM_LANG=en
 
 ```bash
 export LLM_API_KEY=your-api-key-here
-mdfm process ./my-notes
+mdh process ./my-notes
 ```
 
-### LLM 제공자별 설정 예시
+### LLM 제공자별 설정
 
 **OpenRouter** (기본):
 ```env
@@ -142,85 +165,15 @@ LLM_MODEL=llama3.2
 
 OpenAI 호환 API라면 `LLM_BASE_URL`만 변경하면 된다.
 
-## 사용법
+## CLI 레퍼런스
 
-가상환경이 활성화된 상태에서 실행한다:
-
-```bash
-source .venv/bin/activate
-```
-
-### 기본 실행
+### `mdh process`
 
 ```bash
-# 기존 frontmatter 유지, 빈 필드만 추가
-mdfm process ./my-notes
+mdh process <PATH> [OPTIONS]
 ```
 
-### 미리보기 (dry-run)
-
-```bash
-# 파일을 수정하지 않고 결과만 확인
-mdfm process ./my-notes --dry-run
-mdfm process ./my-notes -n          # 단축 옵션
-```
-
-### 강제 덮어쓰기
-
-```bash
-# 모든 필드를 LLM 결과로 덮어쓰기 (created_at은 항상 보존)
-mdfm process ./my-notes --force
-mdfm process ./my-notes -f
-```
-
-### 동시 요청 수 조절
-
-```bash
-# 동시에 10개 파일을 병렬 처리
-mdfm process ./my-notes --concurrency 10
-mdfm process ./my-notes -c 10
-```
-
-### 모델 지정
-
-```bash
-# .env 설정을 무시하고 특정 모델 사용
-mdfm process ./my-notes --model "openai/gpt-4o-mini"
-mdfm process ./my-notes -m "openai/gpt-4o-mini"
-```
-
-### 언어 설정 (한글 / 영어)
-
-CLI 출력 언어를 한글로 변경할 수 있다. 환경변수 또는 `--lang` 옵션을 사용한다:
-
-```bash
-# 환경변수로 한글 설정
-MDFM_LANG=ko mdfm process ./my-notes
-
-# --lang 옵션으로 한글 설정
-mdfm --lang ko process ./my-notes
-
-# 도움말도 한글로 표시
-MDFM_LANG=ko mdfm --help
-MDFM_LANG=ko mdfm process --help
-```
-
-> `--lang` 옵션은 실행 중 메시지(에러, 진행률, 결과)에 적용된다. `--help` 텍스트까지 한글로 보려면 `MDFM_LANG=ko` 환경변수를 사용해야 한다.
-
-### 옵션 조합
-
-```bash
-# 미리보기 + 다른 모델
-mdfm process ./my-notes -n -m "openai/gpt-4o-mini"
-
-# 강제 덮어쓰기 + 높은 동시성
-mdfm process ./my-notes -f -c 20
-
-# 한글 출력 + 미리보기
-mdfm --lang ko process ./my-notes -n
-```
-
-### CLI 옵션 요약
+마크다운 파일(또는 디렉터리)을 처리하여 YAML frontmatter를 생성한다.
 
 | 옵션 | 단축 | 기본값 | 설명 |
 |------|------|--------|------|
@@ -228,7 +181,54 @@ mdfm --lang ko process ./my-notes -n
 | `--dry-run` | `-n` | off | 파일 수정 없이 미리보기 |
 | `--concurrency` | `-c` | 5 | 동시 LLM 요청 수 |
 | `--model` | `-m` | .env 설정값 | 사용할 LLM 모델 |
-| `--lang` | — | `en` | CLI 출력 언어 (`en` / `ko`), 글로벌 옵션 |
+| `--yes` | `-y` | off | 확인 프롬프트 건너뛰기 |
+| `--skip-existing` | `-s` | off | 이미 frontmatter가 있는 파일 건너뛰기 |
+
+```bash
+# 예시
+mdh process ./my-notes                        # 기본 실행
+mdh process ./my-notes -n                     # 미리보기
+mdh process ./my-notes -f -c 20              # 강제 덮어쓰기 + 높은 동시성
+mdh process ./my-notes -s -y                  # frontmatter 있는 파일 건너뛰기
+mdh process ./my-notes -m "openai/gpt-4o-mini"  # 모델 지정
+mdh process ./single-file.md                  # 단일 파일 처리
+```
+
+### `mdh query`
+
+```bash
+mdh query <PATH> [PROMPT] [OPTIONS]
+```
+
+문서 컬렉션의 frontmatter 메타데이터를 기반으로 AI 분석을 수행한다.
+
+| 옵션 | 단축 | 기본값 | 설명 |
+|------|------|--------|------|
+| `--model` | `-m` | .env 설정값 | 사용할 LLM 모델 |
+| `--max-docs` | — | 자동 추정 | 전체 읽기할 최대 문서 수 |
+| `--output` | `-o` | `{PATH}/.mdh-query-result.md` | 결과 저장 경로 |
+| `--no-save` | — | off | 파일 저장 안 함 (터미널 출력만) |
+| `--yes` | `-y` | off | 확인 프롬프트 건너뛰기 |
+
+```bash
+# 예시
+mdh query ./my-notes                              # 전체 컬렉션 요약
+mdh query ./my-notes "AI 관련 문서를 정리해줘"     # 특정 질의
+mdh query ./my-notes --max-docs 10                # 최대 10개 문서만 읽기
+mdh query ./my-notes -o ./분석결과.md             # 저장 경로 지정
+mdh query ./my-notes --no-save -y                 # 터미널 출력만, 확인 생략
+```
+
+### 글로벌 옵션
+
+| 옵션 | 설명 |
+|------|------|
+| `--lang` | CLI 출력 언어 (`en` / `ko`). `--help` 텍스트까지 바꾸려면 `MDFM_LANG=ko` 환경변수 사용 |
+
+```bash
+mdh --lang ko process ./my-notes
+MDFM_LANG=ko mdh --help
+```
 
 ## 생성되는 Frontmatter
 
@@ -253,28 +253,21 @@ related_topics: [web-development, api-design]
 | 필드 | 설명 | 가능한 값 |
 |------|------|-----------|
 | `title` | 문서 제목 | 본문에서 추론 |
-| `created_at` | 최초 생성 시점 | git log / 파일 생성시간 |
+| `created_at` | 최초 생성 시점 | git log → 파일 생성시간 → 현재시간 |
 | `updated_at` | 마지막 처리 시점 | 실행 시 현재 시간 |
 | `tags` | 키워드 태그 | 소문자, 하이픈 구분, 3-7개 |
 | `category` | 문서 분류 | `technology`, `personal`, `work`, `research`, `creative`, `reference`, `other` |
 | `doc_type` | 문서 유형 | `journal`, `note`, `wiki`, `meeting_notes`, `reference`, `tutorial`, `essay`, `log` |
 | `summary` | 1-2문장 요약 | 문서 언어와 동일 |
-| `entities` | 주요 개체 | `type`: `person`, `organization`, `technology`, `place`, `event`, `other` |
+| `entities` | 주요 개체 | `person`, `organization`, `technology`, `place`, `event`, `other` |
 | `related_topics` | 관련 주제 | 넓은 범위의 테마, 2-5개 |
 
-## Merge 동작
+### Merge 동작
 
 | 모드 | 동작 |
 |------|------|
 | 기본 (merge) | 기존 frontmatter 필드 유지, 없는 필드만 추가 |
 | `--force` | 모든 필드 덮어쓰기 (`created_at` 제외) |
-
-`created_at`은 `--force`여도 기존 값을 보존한다 (최초 생성 시점 유지).
-
-## Timestamp 결정 우선순위
-
-- `created_at`: git log 첫 커밋 날짜 → 파일 생성시간(macOS birth time) → 현재시간
-- `updated_at`: 처리 시점의 현재 시간
 
 ## 테스트
 
@@ -287,20 +280,23 @@ pytest -v
 
 ```
 src/markdown_frontmatterer/
-├── cli.py              # Typer CLI (mdfm process 커맨드)
+├── cli.py              # Typer CLI (process, query 커맨드)
 ├── config.py           # pydantic-settings 환경 설정
-├── i18n.py             # 다국어 지원 (en/ko 번역)
+├── i18n.py             # 다국어 지원 (en/ko)
 ├── models.py           # Frontmatter/Entity Pydantic 모델
+├── query_models.py     # Query 응답 모델 (DocumentSelection, QueryAnswer)
+├── query_prompts.py    # Query 프롬프트 템플릿
+├── query.py            # Query 오케스트레이터 (카탈로그→선별→분석)
 ├── scanner.py          # .md 파일 재귀 탐색
 ├── frontmatter_io.py   # frontmatter 읽기/병합/쓰기
 ├── llm.py              # OpenAI 호환 async LLM 클라이언트
-├── prompts.py          # LLM 프롬프트 템플릿
-└── processor.py        # 오케스트레이터 (스캔→분석→병합→저장)
+├── prompts.py          # Process 프롬프트 템플릿
+└── processor.py        # Process 오케스트레이터 (스캔→분석→병합→저장)
 ```
 
 ## 기술 스택
 
-- **CLI**: Typer + Rich (progress bar, 결과 테이블)
+- **CLI**: Typer + Rich (progress bar, 마크다운 렌더링, 결과 테이블)
 - **LLM 호출**: httpx async + Semaphore 동시성 제어 + exponential backoff 재시도
 - **Frontmatter 처리**: python-frontmatter
 - **설정**: pydantic-settings (.env 자동 로드)

@@ -26,7 +26,7 @@ dev = [
 ]
 
 [project.scripts]
-mdfm = "markdown_frontmatterer.cli:app"
+mdh = "markdown_frontmatterer.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/markdown_frontmatterer"]

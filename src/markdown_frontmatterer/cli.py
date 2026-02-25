@@ -9,6 +9,7 @@ from typing import Annotated, Optional
 
 import typer
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich.table import Table
@@ -53,7 +54,7 @@ CHARS_PER_TOKEN = 4
 AVG_RESPONSE_SECONDS = 3
 
 app = typer.Typer(
-    name="mdfm",
+    name="mdh",
     help=t("app_help"),
     no_args_is_help=True,
 )
@@ -287,3 +288,125 @@ def process(
     )
 
     _print_summary(result, root)
+
+
+@app.command("query", help=t("cmd_query_help"))
+def query(
+    path: Annotated[
+        Path,
+        typer.Argument(help=t("arg_query_path")),
+    ],
+    prompt: Annotated[
+        Optional[str],
+        typer.Argument(help=t("arg_query_prompt")),
+    ] = None,
+    model: Annotated[
+        Optional[str],
+        typer.Option("--model", "-m", help=t("opt_model")),
+    ] = None,
+    max_docs: Annotated[
+        Optional[int],
+        typer.Option("--max-docs", help=t("opt_max_docs")),
+    ] = None,
+    output: Annotated[
+        Optional[Path],
+        typer.Option("--output", "-o", help=t("opt_output")),
+    ] = None,
+    no_save: Annotated[
+        bool,
+        typer.Option("--no-save", help=t("opt_no_save")),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help=t("opt_yes")),
+    ] = False,
+) -> None:
+    """Query and analyse a document collection using frontmatter metadata."""
+    from markdown_frontmatterer.query import QueryResult, run_query, save_query_result
+    from markdown_frontmatterer.scanner import scan_markdown_files as scan
+
+    if not path.exists():
+        console.print(f"[red]{t('err_not_found', path=path)}[/red]")
+        raise typer.Exit(code=1)
+    if not path.is_dir():
+        console.print(f"[red]{t('err_not_dir', path=path)}[/red]")
+        raise typer.Exit(code=1)
+
+    settings = Settings()
+    if not settings.llm_api_key:
+        console.print(f"[red]{t('err_no_api_key')}[/red]")
+        raise typer.Exit(code=1)
+
+    effective_model = model or settings.llm_model
+
+    # Quick file count
+    files = scan(path)
+    if not files:
+        console.print(f"[yellow]{t('query_no_files')}[/yellow]")
+        raise typer.Exit()
+
+    console.print(t("query_found_files", count=len(files), root=path))
+    console.print(f"[dim]{t('query_api_calls_note')}[/dim]")
+
+    if not yes:
+        answer = console.input(f"{t('confirm_proceed')} ")
+        if answer.strip().lower() not in ("", "y", "yes"):
+            console.print(f"[yellow]{t('cancelled')}[/yellow]")
+            raise typer.Exit()
+
+    result: QueryResult | None = None
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task_id = progress.add_task(t("query_building_catalog"), total=3)
+
+        phase_count = 0
+
+        def on_progress(phase: str) -> None:
+            nonlocal phase_count
+            phase_count += 1
+            progress.advance(task_id)
+            if phase == "catalog_done":
+                progress.update(task_id, description=t("query_selecting_docs"))
+            elif phase == "selection_done":
+                progress.update(task_id, description=t("query_analyzing", count="..."))
+            elif phase == "analysis_done":
+                progress.update(task_id, description=t("query_done"))
+
+        result = asyncio.run(
+            run_query(
+                path,
+                settings,
+                prompt,
+                model=effective_model,
+                max_docs=max_docs,
+                progress_callback=on_progress,
+            )
+        )
+
+    # ── Display result ───────────────────────────────────────
+    console.print()
+    console.print(Panel(Markdown(result.answer), title=t("query_result_title"), border_style="green"))
+
+    if result.sources:
+        source_table = Table(title=t("query_sources_title"))
+        source_table.add_column(t("col_file"), style="cyan")
+        source_table.add_column("Title")
+        source_table.add_column(t("query_col_relevance"))
+        for s in result.sources:
+            source_table.add_row(s["path"], s["title"], s["relevance"])
+        console.print(source_table)
+
+    console.print(
+        f"\n[dim]{t('query_stats', total=result.total_files_scanned, with_fm=result.files_with_frontmatter, read=result.files_read_in_full, cat_tokens=result.catalog_tokens_est, analysis_tokens=result.analysis_tokens_est)}[/dim]"
+    )
+
+    # ── Save result ──────────────────────────────────────────
+    if not no_save:
+        saved = save_query_result(
+            result, path, prompt, effective_model, output_path=output
+        )
+        console.print(f"\n[green]{t('query_saved', path=saved)}[/green]")

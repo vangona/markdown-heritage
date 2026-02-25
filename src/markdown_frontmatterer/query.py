@@ -304,7 +304,8 @@ def save_query_result(
     if output_path is None:
         result_dir = Path("result")
         result_dir.mkdir(exist_ok=True)
-        dest = result_dir / "mdh-query-result.md"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dest = result_dir / f"mdh-query-{timestamp}.md"
     else:
         dest = output_path
 

@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Annotated
+
+from pydantic import BaseModel, BeforeValidator, Field
+
+
+def _coerce_str(v: object) -> str:
+    return str(v) if not isinstance(v, str) else v
 
 
 class SourceReference(BaseModel):
     path: str
     title: str
-    relevance: str
+    relevance: Annotated[str, BeforeValidator(_coerce_str)]
 
 
 class DocumentSelection(BaseModel):

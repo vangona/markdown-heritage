@@ -233,6 +233,7 @@ async def run_query(
             selection_messages,
             model=model,
             response_model=DocumentSelection,
+            max_tokens=16_384,
         )
 
         if progress_callback:
@@ -274,7 +275,7 @@ async def run_query(
             analysis_messages,
             model=model,
             response_model=QueryAnswer,
-            max_tokens=8192,
+            max_tokens=16_384,
         )
 
         if progress_callback:
@@ -300,7 +301,12 @@ def save_query_result(
     output_path: Path | None = None,
 ) -> Path:
     """Save the query result as a markdown file with frontmatter."""
-    dest = output_path or (root / ".mdh-query-result.md")
+    if output_path is None:
+        result_dir = Path("result")
+        result_dir.mkdir(exist_ok=True)
+        dest = result_dir / "mdh-query-result.md"
+    else:
+        dest = output_path
 
     now = datetime.now(timezone.utc).isoformat()
 

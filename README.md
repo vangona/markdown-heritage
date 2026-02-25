@@ -206,7 +206,7 @@ mdh query <PATH> [PROMPT] [OPTIONS]
 |------|------|--------|------|
 | `--model` | `-m` | .env 설정값 | 사용할 LLM 모델 |
 | `--max-docs` | — | 자동 추정 | 전체 읽기할 최대 문서 수 |
-| `--output` | `-o` | `{PATH}/.mdh-query-result.md` | 결과 저장 경로 |
+| `--output` | `-o` | `./result/mdh-query-result.md` | 결과 저장 경로 |
 | `--no-save` | — | off | 파일 저장 안 함 (터미널 출력만) |
 | `--yes` | `-y` | off | 확인 프롬프트 건너뛰기 |
 

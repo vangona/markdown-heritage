@@ -217,6 +217,139 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "No .md files found in the directory.",
         "ko": "디렉터리에서 .md 파일을 찾을 수 없습니다.",
     },
+    # ── collect command ──────────────────────────────────────────
+    "cmd_collect_help": {
+        "en": "Collect Instagram profile data and save as Markdown.",
+        "ko": "Instagram 프로필 데이터를 수집하여 마크다운으로 저장합니다.",
+    },
+    "arg_collect_target": {
+        "en": "Instagram username (@username or username).",
+        "ko": "Instagram 사용자명 (@username 또는 username).",
+    },
+    "opt_browser": {
+        "en": "Open a browser to log in to Instagram (Playwright).",
+        "ko": "브라우저를 열어 Instagram 로그인 (Playwright).",
+    },
+    "opt_login": {
+        "en": "Instagram account for login.",
+        "ko": "로그인에 사용할 Instagram 계정.",
+    },
+    "opt_password": {
+        "en": "Password (omit for interactive input).",
+        "ko": "비밀번호 (생략 시 대화형 입력).",
+    },
+    "opt_session": {
+        "en": "Session file path.",
+        "ko": "세션 파일 경로.",
+    },
+    "opt_stories": {
+        "en": "Collect stories (requires login + following).",
+        "ko": "스토리 수집 (로그인+팔로잉 필요).",
+    },
+    "opt_highlights": {
+        "en": "Collect highlights (requires login).",
+        "ko": "하이라이트 수집 (로그인 필요).",
+    },
+    "opt_reels": {
+        "en": "Collect reels.",
+        "ko": "릴스 수집.",
+    },
+    "opt_limit": {
+        "en": "Max number of posts to collect.",
+        "ko": "최대 게시글 수.",
+    },
+    "opt_delay": {
+        "en": "Delay between requests in seconds.",
+        "ko": "요청 간 대기 시간(초).",
+    },
+    "collect_starting": {
+        "en": "Collecting @{target}...",
+        "ko": "@{target} 수집 시작...",
+    },
+    "collect_no_login_warning": {
+        "en": "[yellow]Warning: No --login or --browser specified. Most data requires authentication.[/yellow]",
+        "ko": "[yellow]경고: --login 또는 --browser가 지정되지 않았습니다. 대부분의 데이터는 인증이 필요합니다.[/yellow]",
+    },
+    "collect_browser_login_prompt": {
+        "en": "Log in to Instagram in the browser, then press Enter here...",
+        "ko": "브라우저에서 Instagram에 로그인한 후 여기서 Enter를 누르세요...",
+    },
+    "collect_browser_already_logged_in": {
+        "en": "Existing login session found.",
+        "ko": "기존 로그인 세션 발견.",
+    },
+    "collect_session_expired": {
+        "en": "[yellow]Session expired. Use --browser to re-authenticate from your browser.[/yellow]",
+        "ko": "[yellow]세션이 만료되었습니다. --browser 옵션으로 브라우저에서 재인증하세요.[/yellow]",
+    },
+    "collect_login_deprecated": {
+        "en": "[yellow]Warning: --login/--password authentication is unstable (instaloader issue). Prefer --browser.[/yellow]",
+        "ko": "[yellow]경고: --login/--password 인증이 불안정합니다 (instaloader 이슈). --browser 사용을 권장합니다.[/yellow]",
+    },
+    "collect_confirm": {
+        "en": "Collect @{target}'s profile (posts{extras})?\nOutput: {output}",
+        "ko": "@{target}의 프로필을 수집합니다 (게시글{extras}).\n출력: {output}",
+    },
+    "collect_authenticating": {
+        "en": "Authenticating as @{login}...",
+        "ko": "@{login}으로 인증 중...",
+    },
+    "collect_fetching_profile": {
+        "en": "Fetching profile...",
+        "ko": "프로필 가져오는 중...",
+    },
+    "collect_profile_info": {
+        "en": "@{username} — {full_name} | {posts} posts | {followers:,} followers",
+        "ko": "@{username} — {full_name} | 게시글 {posts}개 | 팔로워 {followers:,}명",
+    },
+    "collect_private_error": {
+        "en": "[red]Error: @{username} is a private account and you are not following them.[/red]",
+        "ko": "[red]오류: @{username}은(는) 비공개 계정이며 팔로우하고 있지 않습니다.[/red]",
+    },
+    "collect_fetching_posts": {
+        "en": "Fetching posts...",
+        "ko": "게시글 수집 중...",
+    },
+    "collect_fetching_reels": {
+        "en": "Fetching reels...",
+        "ko": "릴스 수집 중...",
+    },
+    "collect_fetching_stories": {
+        "en": "Fetching stories...",
+        "ko": "스토리 수집 중...",
+    },
+    "collect_fetching_highlights": {
+        "en": "Fetching highlights...",
+        "ko": "하이라이트 수집 중...",
+    },
+    "collect_writing": {
+        "en": "Writing markdown & downloading media...",
+        "ko": "마크다운 작성 및 미디어 다운로드 중...",
+    },
+    "collect_done": {
+        "en": "Collection complete!",
+        "ko": "수집 완료!",
+    },
+    "collect_summary": {
+        "en": "{posts} posts, {reels} reels, {stories} stories, {highlights} highlight items, {media} media files",
+        "ko": "게시글 {posts}개, 릴스 {reels}개, 스토리 {stories}개, 하이라이트 {highlights}개, 미디어 {media}개",
+    },
+    "collect_saved_to": {
+        "en": "Saved to: {path}",
+        "ko": "저장됨: {path}",
+    },
+    "collect_error": {
+        "en": "[red]Error during collection: {error}[/red]",
+        "ko": "[red]수집 중 오류 발생: {error}[/red]",
+    },
+    "collect_partial_warning": {
+        "en": "[yellow]Warning: Some data could not be collected (rate limiting). Saving partial results.[/yellow]",
+        "ko": "[yellow]경고: 일부 데이터를 수집하지 못했습니다 (속도 제한). 수집된 부분만 저장합니다.[/yellow]",
+    },
+    "collect_errors_detail": {
+        "en": "[dim]Errors: {errors}[/dim]",
+        "ko": "[dim]오류 내역: {errors}[/dim]",
+    },
     # ── errors ──────────────────────────────────────────────────
     "err_not_dir": {
         "en": "Error: {path} is not a directory.",

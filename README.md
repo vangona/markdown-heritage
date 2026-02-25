@@ -37,16 +37,31 @@ updated_at: '2026-02-26T00:00:00Z'
 
 # mdh — markdown heritage
 
-마크다운에 담긴 기록을 AI로 **정리**하고 **분석**하는 CLI 도구.
+마크다운에 담긴 기록을 **담고**, **정리**하고, **분석**하는 CLI 도구.
 
-일기, 노트, 위키, 회의록, 에세이 — 누군가의 생각과 경험은 마크다운 파일 속에 쌓인다. `mdh`는 이 기록에 구조를 부여하고, 흩어진 문서들 사이에서 맥락을 찾아낸다.
+일기, 노트, 위키, 회의록, 에세이 — 누군가의 생각과 경험은 마크다운 파일 속에 쌓인다. `mdh`는 외부 소스에서 기록을 수집하고, 구조를 부여하며, 흩어진 문서들 사이에서 맥락을 찾아낸다.
 
 ```
-mdh process ./my-notes      # 기록에 메타데이터를 입힌다
+mdh collect @username --browser          # 기록을 담는다 (Instagram)
+mdh process ./my-notes                   # 기록에 메타데이터를 입힌다
 mdh query ./my-notes "AI 관련 문서를 정리해줘"  # 기록을 분석한다
 ```
 
 ## 동작 방식
+
+### `mdh collect` — 기록 수집
+
+외부 소스(Instagram)에서 데이터를 수집하여 마크다운으로 보존한다. 프로필 정보, 게시글, 릴스, 스토리, 하이라이트를 마크다운 + 미디어 파일로 아카이빙한다.
+
+```bash
+# 첫 실행: 브라우저 창이 열림 → Instagram 로그인 → Enter
+mdh collect @username --browser --limit 3 -y
+
+# 이후 실행: 자동 인증 (persistent context)
+mdh collect @username --browser -y
+```
+
+> **Playwright persistent context:** 로그인 상태가 `~/.mdh/browser-profile/`에 저장되어, 한번 로그인하면 이후 자동 인증됩니다. 2FA, 캡차도 브라우저에서 직접 처리합니다.
 
 ### `mdh process` — 기록 정리
 
@@ -167,6 +182,47 @@ OpenAI 호환 API라면 `LLM_BASE_URL`만 변경하면 된다.
 
 ## CLI 레퍼런스
 
+### `mdh collect`
+
+```bash
+mdh collect <TARGET> [OPTIONS]
+```
+
+Instagram 프로필 데이터를 수집하여 마크다운으로 저장한다.
+
+| 옵션 | 단축 | 기본값 | 설명 |
+|------|------|--------|------|
+| `--browser` | `-b` | off | 브라우저를 열어 Instagram 로그인 (Playwright) — 권장 |
+| `--login` | `-l` | None | 로그인에 사용할 Instagram 계정 (불안정) |
+| `--password` | `-p` | None | 비밀번호 (생략 시 대화형 입력, 불안정) |
+| `--session` | — | None | 세션 파일 경로 |
+| `--output` | `-o` | `./collected` | 출력 디렉터리 |
+| `--stories` | — | off | 스토리 수집 (로그인+팔로잉 필요) |
+| `--highlights` | — | off | 하이라이트 수집 (로그인 필요) |
+| `--reels/--no-reels` | — | on | 릴스 수집 |
+| `--limit` | `-n` | None | 최대 게시글 수 |
+| `--delay` | `-d` | 5.0 | 요청 간 대기 시간(초) |
+| `--yes` | `-y` | off | 확인 프롬프트 건너뛰기 |
+
+```bash
+# 예시
+mdh collect @instagram --browser                  # 브라우저로 로그인
+mdh collect @instagram --browser --stories        # 스토리 포함
+mdh collect @instagram --browser --limit 50 -y    # 50개 제한, 확인 생략
+```
+
+**출력 구조:**
+```
+collected/@username/
+├── _profile.md        # 프로필 정보
+├── _index.md          # 전체 인덱스
+├── media/             # 미디어 파일 (사진, 동영상)
+├── posts/             # 게시글 마크다운
+├── reels/             # 릴스 마크다운
+├── stories/           # 스토리 마크다운
+└── highlights/        # 하이라이트
+```
+
 ### `mdh process`
 
 ```bash
@@ -280,10 +336,13 @@ pytest -v
 
 ```
 src/markdown_frontmatterer/
-├── cli.py              # Typer CLI (process, query 커맨드)
+├── cli.py              # Typer CLI (collect, process, query 커맨드)
 ├── config.py           # pydantic-settings 환경 설정
 ├── i18n.py             # 다국어 지원 (en/ko)
 ├── models.py           # Frontmatter/Entity Pydantic 모델
+├── collect_models.py   # Collect 데이터 모델
+├── collector.py        # Instagram 수집 파이프라인
+├── collect_writer.py   # Collect 마크다운 생성 + 미디어 다운로드
 ├── query_models.py     # Query 응답 모델 (DocumentSelection, QueryAnswer)
 ├── query_prompts.py    # Query 프롬프트 템플릿
 ├── query.py            # Query 오케스트레이터 (카탈로그→선별→분석)
@@ -298,6 +357,7 @@ src/markdown_frontmatterer/
 
 - **CLI**: Typer + Rich (progress bar, 마크다운 렌더링, 결과 테이블)
 - **LLM 호출**: httpx async + Semaphore 동시성 제어 + exponential backoff 재시도
+- **Instagram 수집**: instaloader + Playwright (브라우저 persistent context 인증)
 - **Frontmatter 처리**: python-frontmatter
 - **설정**: pydantic-settings (.env 자동 로드)
 - **검증**: Pydantic v2 (Literal 타입으로 category/doc_type 값 제한)

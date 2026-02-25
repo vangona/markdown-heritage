@@ -12,3 +12,6 @@ venv/
 .ruff_cache/
 *.pyc
 .DS_Store
+
+/result
+/collected

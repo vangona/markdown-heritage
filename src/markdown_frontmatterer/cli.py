@@ -410,3 +410,183 @@ def query(
             result, path, prompt, effective_model, output_path=output
         )
         console.print(f"\n[green]{t('query_saved', path=saved)}[/green]")
+
+
+@app.command("collect", help=t("cmd_collect_help"))
+def collect(
+    target: Annotated[
+        str,
+        typer.Argument(help=t("arg_collect_target")),
+    ],
+    browser: Annotated[
+        bool,
+        typer.Option("--browser", "-b", help=t("opt_browser")),
+    ] = False,
+    login: Annotated[
+        Optional[str],
+        typer.Option("--login", "-l", help=t("opt_login")),
+    ] = None,
+    password: Annotated[
+        Optional[str],
+        typer.Option("--password", "-p", help=t("opt_password")),
+    ] = None,
+    session: Annotated[
+        Optional[str],
+        typer.Option("--session", help=t("opt_session")),
+    ] = None,
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help=t("opt_output")),
+    ] = Path("./collected"),
+    stories: Annotated[
+        bool,
+        typer.Option("--stories", help=t("opt_stories")),
+    ] = False,
+    highlights: Annotated[
+        bool,
+        typer.Option("--highlights", help=t("opt_highlights")),
+    ] = False,
+    reels: Annotated[
+        bool,
+        typer.Option("--reels/--no-reels", help=t("opt_reels")),
+    ] = True,
+    limit: Annotated[
+        Optional[int],
+        typer.Option("--limit", "-n", help=t("opt_limit")),
+    ] = None,
+    delay: Annotated[
+        float,
+        typer.Option("--delay", "-d", help=t("opt_delay")),
+    ] = 5.0,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help=t("opt_yes")),
+    ] = False,
+) -> None:
+    """Collect Instagram profile data and save as Markdown."""
+    from markdown_frontmatterer.collect_writer import write_all
+    from markdown_frontmatterer.collector import run_collect
+
+    username = target.lstrip("@")
+
+    # Warn if no auth method specified
+    if not browser and not login:
+        console.print(t("collect_no_login_warning"))
+
+    # Warn about unstable login method
+    if login and not browser:
+        console.print(t("collect_login_deprecated"))
+
+    # Build confirmation message
+    extras = ""
+    if reels:
+        extras += ", reels"
+    if stories:
+        extras += ", stories"
+    if highlights:
+        extras += ", highlights"
+    if limit:
+        extras += f", limit {limit}"
+
+    console.print(t("collect_confirm", target=username, extras=extras, output=output))
+
+    if not yes:
+        answer = console.input(f"{t('confirm_proceed')} ")
+        if answer.strip().lower() not in ("", "y", "yes"):
+            console.print(f"[yellow]{t('cancelled')}[/yellow]")
+            raise typer.Exit()
+
+    # Run collection with progress
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task(t("collect_starting", target=username), total=None)
+
+        def on_progress(phase: str) -> None:
+            if phase == "profile_done":
+                progress.update(task, description=t("collect_fetching_posts"))
+            elif phase.startswith("post:"):
+                progress.update(task, description=t("collect_fetching_posts"))
+            elif phase.startswith("reel:"):
+                progress.update(task, description=t("collect_fetching_reels"))
+            elif phase.startswith("story:"):
+                progress.update(task, description=t("collect_fetching_stories"))
+            elif phase.startswith("highlight:"):
+                progress.update(task, description=t("collect_fetching_highlights"))
+            elif phase == "collection_done":
+                progress.update(task, description=t("collect_writing"))
+
+        try:
+            result = run_collect(
+                target,
+                login_user=login,
+                password=password,
+                session_file=session,
+                browser=browser,
+                output_dir=output,
+                include_stories=stories,
+                include_highlights=highlights,
+                include_reels=reels,
+                limit=limit,
+                delay=delay,
+                progress_callback=on_progress,
+            )
+        except PermissionError:
+            progress.stop()
+            console.print(t("collect_private_error", username=username))
+            raise typer.Exit(code=1)
+        except Exception as exc:
+            progress.stop()
+            console.print(t("collect_error", error=str(exc)))
+            raise typer.Exit(code=1)
+
+        # Show profile info
+        progress.update(task, description=t("collect_writing"))
+        p = result.profile
+        progress.stop()
+
+    console.print(t("collect_profile_info",
+        username=p.username, full_name=p.full_name,
+        posts=p.media_count, followers=p.followers,
+    ))
+
+    # Warn about partial results
+    if result.errors:
+        console.print(t("collect_partial_warning"))
+        console.print(t("collect_errors_detail", errors="; ".join(result.errors)))
+
+    # Check if we have anything to write
+    has_content = result.posts or result.reels or result.stories or result.highlights
+    if not has_content:
+        console.print(t("collect_partial_warning"))
+        # Still write profile + index even with no posts
+        console.print("[dim]Writing profile only...[/dim]")
+
+    # Write files
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        write_task = progress.add_task(t("collect_writing"), total=None)
+        counts = write_all(result, output, delay=min(delay, 1.0))
+        progress.update(write_task, description=t("collect_done"))
+
+    # Summary
+    border = "green" if not result.errors else "yellow"
+    console.print(Panel(
+        t("collect_summary",
+            posts=counts["posts"],
+            reels=counts["reels"],
+            stories=counts["stories"],
+            highlights=counts["highlights"],
+            media=counts["media"],
+        ),
+        title=t("collect_done"),
+        border_style=border,
+    ))
+
+    save_path = output / f"@{username}"
+    console.print(f"[green]{t('collect_saved_to', path=save_path)}[/green]")

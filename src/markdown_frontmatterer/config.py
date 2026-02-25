@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     concurrency: int = 5
     max_retries: int = 3
     mdfm_lang: str = "en"
+    instagram_session_dir: str = ""  # Custom instaloader session directory
 
 
 settings = Settings()

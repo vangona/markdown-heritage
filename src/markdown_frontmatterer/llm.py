@@ -79,6 +79,13 @@ class LLMClient:
             async with self._semaphore:
                 data = await self._request_with_retry(payload)
 
+            usage = data.get("usage", {})
+            if usage:
+                logger.info(
+                    "Token usage: prompt=%s completion=%s total=%s",
+                    usage.get("prompt_tokens"), usage.get("completion_tokens"), usage.get("total_tokens"),
+                )
+
             raw_text = data["choices"][0]["message"]["content"]
             finish_reason = data["choices"][0].get("finish_reason")
 
@@ -161,6 +168,14 @@ class LLMClient:
 
             async with self._semaphore:
                 data = await self._request_with_retry(payload)
+
+            usage = data.get("usage", {})
+            if usage:
+                logger.info(
+                    "Vision token usage: prompt=%s completion=%s total=%s (images=%d, detail=%s)",
+                    usage.get("prompt_tokens"), usage.get("completion_tokens"), usage.get("total_tokens"),
+                    len(capped_images), detail,
+                )
 
             raw_text = data["choices"][0]["message"]["content"]
             finish_reason = data["choices"][0].get("finish_reason")

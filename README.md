@@ -44,6 +44,7 @@ updated_at: '2026-02-26T00:00:00Z'
 ```
 mdh collect @username --browser          # 기록을 담는다 (Instagram)
 mdh process ./my-notes                   # 기록에 메타데이터를 입힌다
+mdh process ./collected --vision         # 이미지까지 분석한다 (멀티모달)
 mdh query ./my-notes "AI 관련 문서를 정리해줘"  # 기록을 분석한다
 ```
 
@@ -67,10 +68,14 @@ mdh collect @username --browser -y
 
 마크다운 파일을 스캔하여 AI가 YAML frontmatter 메타데이터를 자동 생성한다. 제목, 태그, 카테고리, 요약, 엔티티, 관련 주제 등을 추출하여 각 문서에 구조를 부여한다.
 
+`--vision` 옵션을 사용하면 문서에 연결된 이미지를 함께 분석하여 시각 정보까지 반영한 메타데이터를 생성한다. Instagram 게시글처럼 이미지가 핵심인 콘텐츠에 특히 유용하다.
+
 ```bash
-mdh process ./my-notes           # 기본: 없는 필드만 추가
+mdh process ./my-notes           # 기본: 텍스트만 분석
 mdh process ./my-notes -f        # 강제: 모든 필드 덮어쓰기
 mdh process ./my-notes -s -y     # 이미 처리된 파일 건너뛰기
+mdh process ./collected --vision -s -y            # 이미지 포함 분석 (멀티모달)
+mdh process ./collected --vision --vision-detail high  # 고해상도 분석 (비용 증가)
 ```
 
 ### `mdh query` — 기록 분석
@@ -146,6 +151,8 @@ MDFM_LANG=en
 | `LLM_MAX_CONTENT_CHARS` | `12000` | LLM에 전송할 문서 최대 글자 수 |
 | `CONCURRENCY` | `5` | 동시 LLM 요청 수 |
 | `MAX_RETRIES` | `3` | 429 에러 시 재시도 횟수 |
+| `VISION_MAX_IMAGES` | `5` | `--vision` 사용 시 파일당 최대 이미지 수 |
+| `VISION_DETAIL` | `low` | `--vision` 기본 상세도 (`low`/`high`/`auto`) |
 | `MDFM_LANG` | `en` | CLI 출력 언어 (`en` / `ko`) |
 
 `.env` 파일 대신 환경변수로 직접 설정해도 된다:
@@ -239,16 +246,28 @@ mdh process <PATH> [OPTIONS]
 | `--model` | `-m` | .env 설정값 | 사용할 LLM 모델 |
 | `--yes` | `-y` | off | 확인 프롬프트 건너뛰기 |
 | `--skip-existing` | `-s` | off | 이미 frontmatter가 있는 파일 건너뛰기 |
+| `--vision` | — | off | 이미지를 AI 분석에 포함 (멀티모달) |
+| `--vision-detail` | — | `low` | 이미지 분석 상세도 (`low`/`high`/`auto`) |
 
 ```bash
 # 예시
-mdh process ./my-notes                        # 기본 실행
+mdh process ./my-notes                        # 기본 실행 (텍스트 전용)
 mdh process ./my-notes -n                     # 미리보기
 mdh process ./my-notes -f -c 20              # 강제 덮어쓰기 + 높은 동시성
 mdh process ./my-notes -s -y                  # frontmatter 있는 파일 건너뛰기
 mdh process ./my-notes -m "openai/gpt-4o-mini"  # 모델 지정
 mdh process ./single-file.md                  # 단일 파일 처리
+mdh process ./collected --vision -s -y        # 이미지 포함 분석
+mdh process ./collected --vision --vision-detail high  # 고해상도 분석
 ```
+
+**Vision 동작 방식:**
+- frontmatter의 `media_files` 배열 및 본문의 `![alt](path)` 패턴에서 이미지를 자동 탐색
+- 지원 포맷: `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`
+- 파일당 최대 5장, 20MB 초과 이미지는 자동 스킵
+- 이미지 없는 파일은 자동으로 텍스트 전용 분석으로 폴백
+- `detail=low`(기본): 이미지당 ~85 토큰, `high`: ~765 토큰 (GPT-4o 기준)
+- 비용 예시: 5000파일 × 이미지 1-2장 × `detail=low` ≈ **$1.75** (Gemini 2.5 Flash Lite)
 
 ### `mdh query`
 
@@ -303,6 +322,7 @@ entities:
   - name: "김철수"
     type: "person"
 related_topics: [web-development, api-design]
+image_description: "기타를 연주하는 손 클로즈업, 노래 제목 텍스트 오버레이"  # --vision 사용 시
 ---
 ```
 
@@ -317,6 +337,7 @@ related_topics: [web-development, api-design]
 | `summary` | 1-2문장 요약 | 문서 언어와 동일 |
 | `entities` | 주요 개체 | `person`, `organization`, `technology`, `place`, `event`, `other` |
 | `related_topics` | 관련 주제 | 넓은 범위의 테마, 2-5개 |
+| `image_description` | 이미지 시각 설명 (`--vision` 사용 시) | 장면, 분위기, 주요 객체 1-2문장 |
 
 ### Merge 동작
 

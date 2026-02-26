@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from pathlib import Path
 from typing import TypeVar
 
 import httpx
@@ -12,7 +13,12 @@ from pydantic import BaseModel, ValidationError
 
 from markdown_frontmatterer.config import Settings
 from markdown_frontmatterer.models import Frontmatter
-from markdown_frontmatterer.prompts import SYSTEM_PROMPT, build_user_prompt
+from markdown_frontmatterer.prompts import (
+    SYSTEM_PROMPT,
+    VISION_SYSTEM_PROMPT,
+    build_user_prompt,
+    build_vision_user_content,
+)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -112,6 +118,86 @@ class LLMClient:
 
         raise ValueError(
             f"LLM returned invalid output after {_MAX_VALIDATION_RETRIES + 1} attempts"
+        ) from last_exc
+
+    async def analyze_with_vision(
+        self,
+        content: str,
+        image_paths: list[Path],
+        *,
+        model: str | None = None,
+        detail: str = "low",
+        max_images: int = 5,
+    ) -> Frontmatter:
+        """Send document content + images to LLM and return parsed Frontmatter.
+
+        Uses the vision system prompt and encodes images as base64 data URLs.
+        Caps at *max_images* images per call to control cost.
+        """
+        model = model or self._settings.llm_model
+        capped_images = image_paths[:max_images]
+        user_content = build_vision_user_content(
+            content,
+            capped_images,
+            max_chars=self._settings.llm_max_content_chars,
+            detail=detail,
+        )
+
+        base_messages: list[dict] = [
+            {"role": "system", "content": VISION_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ]
+        messages = base_messages
+
+        last_exc: Exception | None = None
+        for attempt in range(_MAX_VALIDATION_RETRIES + 1):
+            payload = {
+                "model": model,
+                "messages": messages,
+                "response_format": {"type": "json_object"},
+                "temperature": 0.1,
+                "max_tokens": _DEFAULT_MAX_TOKENS,
+            }
+
+            async with self._semaphore:
+                data = await self._request_with_retry(payload)
+
+            raw_text = data["choices"][0]["message"]["content"]
+            finish_reason = data["choices"][0].get("finish_reason")
+
+            try:
+                return Frontmatter.model_validate_json(raw_text)
+            except (ValidationError, json.JSONDecodeError) as exc:
+                last_exc = exc
+                if attempt < _MAX_VALIDATION_RETRIES:
+                    if finish_reason == "length":
+                        logger.warning(
+                            "Vision response truncated (attempt %d/%d), retrying",
+                            attempt + 1,
+                            _MAX_VALIDATION_RETRIES + 1,
+                        )
+                        messages = base_messages
+                    else:
+                        logger.warning(
+                            "Vision validation failed (attempt %d/%d): %s",
+                            attempt + 1,
+                            _MAX_VALIDATION_RETRIES + 1,
+                            exc,
+                        )
+                        messages = [
+                            *base_messages,
+                            {"role": "assistant", "content": raw_text},
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"Your previous response caused an error:\n{exc}\n\n"
+                                    "Please return a corrected, complete JSON object."
+                                ),
+                            },
+                        ]
+
+        raise ValueError(
+            f"Vision LLM returned invalid output after {_MAX_VALIDATION_RETRIES + 1} attempts"
         ) from last_exc
 
     async def chat(

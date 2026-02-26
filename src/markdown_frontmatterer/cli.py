@@ -17,7 +17,8 @@ from rich.table import Table
 from markdown_frontmatterer.config import Settings
 from markdown_frontmatterer.frontmatter_io import has_frontmatter
 from markdown_frontmatterer.i18n import set_lang, t
-from markdown_frontmatterer.processor import process_directory, BatchResult
+from markdown_frontmatterer.processor import process_directory, BatchResult, _find_local_images
+from markdown_frontmatterer.frontmatter_io import load_frontmatter as _load_fm
 from markdown_frontmatterer.scanner import scan_markdown_files
 
 # ── Model pricing ($/1M tokens): (input, output) ────────────
@@ -34,11 +35,27 @@ MODEL_PRICING: dict[str, tuple[float, float]] = {
     "google/gemini-3-pro": (2.00, 12.00),
     "google/gemini-3.1-flash": (0.50, 3.00),
     "google/gemini-3.1-pro": (2.00, 12.00),
-    # OpenAI
+    # OpenAI — GPT
     "openai/gpt-4o-mini": (0.15, 0.60),
-    "openai/gpt-4.1-mini": (0.12, 0.48),
-    "openai/gpt-4o": (4.00, 12.00),
-    "openai/gpt-4.1": (4.00, 12.00),
+    "openai/gpt-4o": (2.50, 10.00),
+    "openai/gpt-4.1-nano": (0.10, 0.40),
+    "openai/gpt-4.1-mini": (0.40, 1.60),
+    "openai/gpt-4.1": (2.00, 8.00),
+    "openai/gpt-5-nano": (0.05, 0.40),
+    "openai/gpt-5-mini": (0.25, 2.00),
+    "openai/gpt-5": (1.25, 10.00),
+    "openai/gpt-5-pro": (15.00, 120.00),
+    "openai/gpt-5.1": (1.25, 10.00),
+    "openai/gpt-5.2": (1.75, 14.00),
+    "openai/gpt-5.2-pro": (21.00, 168.00),
+    # OpenAI — o-series (reasoning)
+    "openai/o1-mini": (1.10, 4.40),
+    "openai/o1": (15.00, 60.00),
+    "openai/o1-pro": (150.00, 600.00),
+    "openai/o3-mini": (1.10, 4.40),
+    "openai/o3": (2.00, 8.00),
+    "openai/o3-pro": (20.00, 80.00),
+    "openai/o4-mini": (1.10, 4.40),
     # Anthropic
     "anthropic/claude-haiku-4.5": (0.80, 4.00),
     "anthropic/claude-3.5-sonnet": (3.00, 15.00),
@@ -82,17 +99,60 @@ def _callback(
     """AI-powered YAML frontmatter generator for Markdown files."""
 
 
+# Vision token costs per image (approximate, for cost estimation)
+# GPT-4o family: low=85, high=765 (512px tile-based)
+# GPT-4.1/5 family: 32x32 patch-based, ~1024 for typical image
+# Gemini/Claude: no public formula, use conservative estimate
+VISION_TOKENS_LOW = 85
+VISION_TOKENS_HIGH = 765
+VISION_TOKENS_PATCH_BASED = 1024  # GPT-4.1+, o-series (32x32 patch model)
+
+# Models using patch-based (32x32) vision tokens instead of tile-based
+_PATCH_BASED_MODELS = {
+    "openai/gpt-4.1", "openai/gpt-4.1-mini", "openai/gpt-4.1-nano",
+    "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano",
+    "openai/gpt-5-pro", "openai/gpt-5.1", "openai/gpt-5.2", "openai/gpt-5.2-pro",
+    "openai/o3", "openai/o3-mini", "openai/o3-pro", "openai/o4-mini",
+}
+
+
 def _estimate(
     files: list[Path],
     max_content_chars: int,
     concurrency: int,
     model: str,
+    *,
+    vision: bool = False,
+    vision_detail: str = "low",
 ) -> dict:
     """Build a cost/time estimate dict from the scanned file list."""
     total_input = 0
+    image_count = 0
+    image_files = 0
+
+    if model in _PATCH_BASED_MODELS:
+        # Patch-based models: ~1024 tokens regardless of detail setting
+        tokens_per_image = VISION_TOKENS_PATCH_BASED
+    elif vision_detail == "high":
+        tokens_per_image = VISION_TOKENS_HIGH
+    else:
+        tokens_per_image = VISION_TOKENS_LOW  # auto → estimate as low
+
     for f in files:
         file_chars = min(f.stat().st_size, max_content_chars)
         total_input += SYSTEM_PROMPT_TOKENS + file_chars // CHARS_PER_TOKEN
+
+        if vision:
+            try:
+                meta, _ = _load_fm(f)
+            except Exception:
+                meta = {}
+            imgs = _find_local_images(f, meta)
+            n = min(len(imgs), 5)  # capped at 5 per file
+            if n:
+                image_count += n
+                image_files += 1
+                total_input += n * tokens_per_image
 
     total_output = len(files) * OUTPUT_TOKENS_PER_FILE
     total_tokens = total_input + total_output
@@ -113,6 +173,9 @@ def _estimate(
         "model": model,
         "seconds": est_seconds,
         "concurrency": concurrency,
+        "image_count": image_count,
+        "image_files": image_files,
+        "vision_detail": vision_detail,
     }
 
 
@@ -121,8 +184,15 @@ def _show_estimate(est: dict) -> None:
     lines = [
         t("estimate_files", count=est["file_count"]),
         t("estimate_api_calls", count=est["file_count"]),
-        t("estimate_tokens", total=est["total_tokens"], input=est["total_input"], output=est["total_output"]),
     ]
+    if est.get("image_count", 0) > 0:
+        lines.append(t(
+            "estimate_images",
+            count=est["image_count"],
+            files=est["image_files"],
+            detail=est["vision_detail"],
+        ))
+    lines.append(t("estimate_tokens", total=est["total_tokens"], input=est["total_input"], output=est["total_output"]))
     if est["cost"] is not None:
         lines.append(t("estimate_cost", cost=est["cost"], model=est["model"]))
     else:
@@ -142,6 +212,8 @@ def _run_with_progress(
     yes: bool,
     skip_existing: bool = False,
     files: list[Path] | None = None,
+    vision: bool = False,
+    vision_detail: str = "low",
 ) -> BatchResult:
     """Run the async processor with a Rich progress bar."""
     if files is None:
@@ -165,7 +237,11 @@ def _run_with_progress(
         console.print(f"[yellow]{t('dry_run_notice')}[/yellow]")
 
     # ── Cost estimate + confirmation ─────────────────────────
-    est = _estimate(files, settings.llm_max_content_chars, settings.concurrency, model or settings.llm_model)
+    est = _estimate(
+        files, settings.llm_max_content_chars, settings.concurrency,
+        model or settings.llm_model,
+        vision=vision, vision_detail=vision_detail,
+    )
     _show_estimate(est)
 
     if not dry_run and not yes:
@@ -195,6 +271,8 @@ def _run_with_progress(
                 model=model,
                 progress_callback=on_progress,
                 files=files,
+                vision=vision,
+                vision_detail=vision_detail,
             )
         )
 
@@ -253,6 +331,14 @@ def process(
         bool,
         typer.Option("--skip-existing", "-s", help=t("opt_skip_existing")),
     ] = False,
+    vision: Annotated[
+        bool,
+        typer.Option("--vision", help=t("opt_vision")),
+    ] = False,
+    vision_detail: Annotated[
+        str,
+        typer.Option("--vision-detail", help=t("opt_vision_detail")),
+    ] = "low",
 ) -> None:
     """Process Markdown files and generate YAML frontmatter using AI."""
     if not path.exists():
@@ -285,6 +371,8 @@ def process(
         yes=yes,
         skip_existing=skip_existing,
         files=files,
+        vision=vision,
+        vision_detail=vision_detail,
     )
 
     _print_summary(result, root)

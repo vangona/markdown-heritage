@@ -91,3 +91,4 @@ class Frontmatter(BaseModel):
     summary: str = ""
     entities: list[Entity] = Field(default_factory=list)
     related_topics: list[str] = Field(default_factory=list)
+    image_description: str = ""

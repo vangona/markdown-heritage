@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     max_retries: int = 3
     mdfm_lang: str = "en"
     instagram_session_dir: str = ""  # Custom instaloader session directory
+    vision_max_images: int = 5
+    vision_detail: str = "low"
 
 
 settings = Settings()

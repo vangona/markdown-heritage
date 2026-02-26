@@ -140,6 +140,23 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Skipped [bold]{count}[/bold] file(s) with existing frontmatter",
         "ko": "이미 frontmatter가 있는 파일 [bold]{count}[/bold]개를 건너뛰었습니다",
     },
+    # ── vision options ──────────────────────────────────────────
+    "opt_vision": {
+        "en": "Include images in AI analysis (multimodal).",
+        "ko": "AI 분석에 이미지를 포함합니다 (멀티모달).",
+    },
+    "opt_vision_detail": {
+        "en": "Image analysis detail level (low/high/auto).",
+        "ko": "이미지 분석 상세 수준 (low/high/auto).",
+    },
+    "estimate_images": {
+        "en": "Images: {count} (in {files} files, detail={detail})",
+        "ko": "이미지: {count}개 ({files}개 파일, detail={detail})",
+    },
+    "vision_no_images": {
+        "en": "--vision enabled but no local images found, using text-only analysis.",
+        "ko": "--vision이 활성화되었지만 로컬 이미지가 없어 텍스트 전용 분석을 사용합니다.",
+    },
     # ── query command ────────────────────────────────────────────
     "cmd_query_help": {
         "en": "Query and analyse a document collection using frontmatter metadata.",

@@ -506,6 +506,10 @@ def collect(
         str,
         typer.Argument(help=t("arg_collect_target")),
     ],
+    logout: Annotated[
+        bool,
+        typer.Option("--logout", help=t("opt_logout")),
+    ] = False,
     browser: Annotated[
         bool,
         typer.Option("--browser", "-b", help=t("opt_browser")),
@@ -553,7 +557,16 @@ def collect(
 ) -> None:
     """Collect Instagram profile data and save as Markdown."""
     from markdown_frontmatterer.collect_writer import write_all
-    from markdown_frontmatterer.collector import run_collect
+    from markdown_frontmatterer.collector import logout as do_logout, run_collect
+
+    # Handle --logout early exit
+    if logout:
+        cleared = do_logout()
+        if cleared:
+            console.print(t("collect_logout_done"))
+        else:
+            console.print(t("collect_logout_nothing"))
+        raise typer.Exit()
 
     username = target.lstrip("@")
 
@@ -603,6 +616,14 @@ def collect(
                 progress.update(task, description=t("collect_fetching_stories"))
             elif phase.startswith("highlight:"):
                 progress.update(task, description=t("collect_fetching_highlights"))
+            elif phase == "challenge_detected":
+                progress.stop()
+                console.print(t("collect_challenge_detected"))
+            elif phase == "challenge_resolved":
+                console.print(t("collect_challenge_resolved"))
+                progress.start()
+            elif phase == "challenge_max_retries":
+                console.print(t("collect_challenge_max_retries", count=3))
             elif phase == "collection_done":
                 progress.update(task, description=t("collect_writing"))
 

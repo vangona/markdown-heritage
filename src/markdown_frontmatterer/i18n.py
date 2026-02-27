@@ -359,6 +359,30 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "[red]Error during collection: {error}[/red]",
         "ko": "[red]수집 중 오류 발생: {error}[/red]",
     },
+    "opt_logout": {
+        "en": "Log out: clear saved browser session and cookies.",
+        "ko": "로그아웃: 저장된 브라우저 세션과 쿠키를 삭제합니다.",
+    },
+    "collect_logout_done": {
+        "en": "[green]Logged out. Cleared browser profile and session files.[/green]",
+        "ko": "[green]로그아웃 완료. 브라우저 프로필과 세션 파일을 삭제했습니다.[/green]",
+    },
+    "collect_logout_nothing": {
+        "en": "No saved sessions found.",
+        "ko": "저장된 세션이 없습니다.",
+    },
+    "collect_challenge_detected": {
+        "en": "[yellow]Instagram challenge detected. Opening browser to resolve...[/yellow]",
+        "ko": "[yellow]Instagram challenge가 감지되었습니다. 브라우저를 열어 해결합니다...[/yellow]",
+    },
+    "collect_challenge_resolved": {
+        "en": "[green]Challenge resolved. Resuming collection...[/green]",
+        "ko": "[green]Challenge 해결됨. 수집을 재개합니다...[/green]",
+    },
+    "collect_challenge_max_retries": {
+        "en": "[red]Challenge could not be resolved after {count} attempts. Saving partial results.[/red]",
+        "ko": "[red]Challenge를 {count}회 시도 후에도 해결하지 못했습니다. 부분 결과를 저장합니다.[/red]",
+    },
     "collect_partial_warning": {
         "en": "[yellow]Warning: Some data could not be collected (rate limiting). Saving partial results.[/yellow]",
         "ko": "[yellow]경고: 일부 데이터를 수집하지 못했습니다 (속도 제한). 수집된 부분만 저장합니다.[/yellow]",

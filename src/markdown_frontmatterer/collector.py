@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 from pathlib import Path
 from typing import Callable
@@ -20,6 +21,29 @@ from markdown_frontmatterer.collect_models import (
 )
 
 logger = logging.getLogger(__name__)
+
+MAX_CHALLENGE_RETRIES = 3
+CONSECUTIVE_ERRORS_THRESHOLD = 3
+
+
+def _is_challenge_error(exc: Exception) -> bool:
+    """Check if an exception indicates Instagram blocked us (challenge/rate-limit).
+
+    Known patterns:
+    - Redirect to /challenge/ page → JSON parse failure ("expecting value")
+    - 401 Unauthorized + "please wait a few minutes" → rate-limit block
+    - 401 Unauthorized + "fail" status → session flagged
+    """
+    msg = str(exc).lower()
+    if "challenge" in msg:
+        return True
+    if "expecting value" in msg and "json" in msg:
+        return True
+    if "unauthorized" in msg and "please wait" in msg:
+        return True
+    if "unauthorized" in msg and '"fail"' in msg:
+        return True
+    return False
 
 
 # ── Loader creation ─────────────────────────────────────────
@@ -161,6 +185,46 @@ def authenticate(
     return True
 
 
+BROWSER_PROFILE_DIR = Path.home() / ".mdh" / "browser-profile"
+INSTALOADER_SESSION_DIR = Path.home() / ".config" / "instaloader"
+
+
+def logout() -> bool:
+    """Clear all saved Instagram sessions. Returns True if anything was removed."""
+    cleared = False
+
+    if BROWSER_PROFILE_DIR.exists():
+        shutil.rmtree(BROWSER_PROFILE_DIR)
+        logger.info("Removed browser profile: %s", BROWSER_PROFILE_DIR)
+        cleared = True
+
+    if INSTALOADER_SESSION_DIR.exists():
+        for session_file in INSTALOADER_SESSION_DIR.glob("session-*"):
+            session_file.unlink()
+            logger.info("Removed session file: %s", session_file)
+            cleared = True
+
+    return cleared
+
+
+def _reauthenticate(
+    loader: instaloader.Instaloader,
+    progress_callback: Callable[[str], None] | None = None,
+) -> None:
+    """Re-authenticate via Playwright after a challenge is detected."""
+    from markdown_frontmatterer.i18n import t
+
+    logger.warning(t("collect_challenge_detected"))
+    if progress_callback:
+        progress_callback("challenge_detected")
+
+    _authenticate_via_playwright(loader)
+
+    logger.info(t("collect_challenge_resolved"))
+    if progress_callback:
+        progress_callback("challenge_resolved")
+
+
 # ── Profile collection ──────────────────────────────────────
 
 
@@ -221,61 +285,112 @@ def collect_posts(
     delay: float = 5.0,
     limit: int | None = None,
     progress_callback: Callable[[str], None] | None = None,
+    loader: instaloader.Instaloader | None = None,
 ) -> list[CollectedPost]:
     """Collect posts from a profile.
 
     Returns whatever posts were collected before any fatal error.
-    The iterator itself can throw ConnectionException during pagination,
-    so we wrap the entire loop to preserve partial results.
+    When a challenge is detected and *loader* is provided, re-authenticates
+    via Playwright and resumes collection from where it left off.
     """
-    posts: list[CollectedPost] = []
-    count = 0
+    from markdown_frontmatterer.i18n import t
 
-    try:
-        for post in profile.get_posts():
-            if limit and count >= limit:
+    posts: list[CollectedPost] = []
+    collected_shortcodes: set[str] = set()
+    consecutive_errors = 0
+    challenge_retries = 0
+    username = profile.username
+
+    while True:  # Re-auth retry loop
+        try:
+            for post in profile.get_posts():
+                if post.shortcode in collected_shortcodes:
+                    continue
+                if limit and len(posts) >= limit:
+                    return posts
+
+                try:
+                    location_name = ""
+                    try:
+                        if post.location:
+                            location_name = post.location.name or ""
+                    except (ConnectionException, Exception):
+                        pass
+
+                    collected = CollectedPost(
+                        shortcode=post.shortcode,
+                        author=username,
+                        date=post.date_utc,
+                        caption=post.caption or "",
+                        likes=post.likes if isinstance(post.likes, int) else 0,
+                        comments=post.comments,
+                        is_video=post.is_video,
+                        content_type="post",
+                        location=location_name,
+                        hashtags=list(post.caption_hashtags),
+                        mentions=list(post.caption_mentions),
+                        media=_collect_post_media(post),
+                    )
+                    posts.append(collected)
+                    collected_shortcodes.add(post.shortcode)
+                    consecutive_errors = 0
+
+                    if progress_callback:
+                        progress_callback(f"post:{post.shortcode}")
+
+                    time.sleep(delay)
+
+                except QueryReturnedNotFoundException:
+                    logger.warning("Post not found (deleted?), skipping")
+                except ConnectionException as exc:
+                    consecutive_errors += 1
+                    if (
+                        consecutive_errors >= CONSECUTIVE_ERRORS_THRESHOLD
+                        and _is_challenge_error(exc)
+                        and loader
+                        and challenge_retries < MAX_CHALLENGE_RETRIES
+                    ):
+                        challenge_retries += 1
+                        logger.warning(
+                            "Challenge detected after %d posts (attempt %d/%d)",
+                            len(posts), challenge_retries, MAX_CHALLENGE_RETRIES,
+                        )
+                        _reauthenticate(loader, progress_callback)
+                        profile = Profile.from_username(loader.context, username)
+                        break  # Break inner for-loop → retry via while
+                    elif consecutive_errors >= CONSECUTIVE_ERRORS_THRESHOLD and _is_challenge_error(exc):
+                        logger.warning(
+                            "Challenge detected but no browser auth available. "
+                            "Returning %d posts collected so far.", len(posts),
+                        )
+                        return posts
+                    else:
+                        logger.warning("Connection error on post %s: %s", post.shortcode, exc)
+                        time.sleep(delay * 3)
+            else:
+                # for-loop completed without break → all posts iterated
                 break
 
-            try:
-                location_name = ""
-                try:
-                    if post.location:
-                        location_name = post.location.name or ""
-                except (ConnectionException, Exception):
-                    pass
-
-                collected = CollectedPost(
-                    shortcode=post.shortcode,
-                    author=profile.username,
-                    date=post.date_utc,
-                    caption=post.caption or "",
-                    likes=post.likes if isinstance(post.likes, int) else 0,
-                    comments=post.comments,
-                    is_video=post.is_video,
-                    content_type="post",
-                    location=location_name,
-                    hashtags=list(post.caption_hashtags),
-                    mentions=list(post.caption_mentions),
-                    media=_collect_post_media(post),
+        except ConnectionException as exc:
+            if _is_challenge_error(exc) and loader and challenge_retries < MAX_CHALLENGE_RETRIES:
+                challenge_retries += 1
+                logger.warning(
+                    "Pagination challenge after %d posts (attempt %d/%d)",
+                    len(posts), challenge_retries, MAX_CHALLENGE_RETRIES,
                 )
-                posts.append(collected)
-                count += 1
+                _reauthenticate(loader, progress_callback)
+                profile = Profile.from_username(loader.context, username)
+                continue  # Retry via while
+            logger.warning("Pagination error after %d posts: %s", len(posts), exc)
+            break
+        except KeyboardInterrupt:
+            logger.info("Interrupted by user after %d posts", len(posts))
+            break
 
-                if progress_callback:
-                    progress_callback(f"post:{post.shortcode}")
-
-                time.sleep(delay)
-
-            except QueryReturnedNotFoundException:
-                logger.warning("Post not found (deleted?), skipping")
-            except ConnectionException as exc:
-                logger.warning("Connection error on post %s: %s", post.shortcode, exc)
-                time.sleep(delay * 3)  # Extra backoff
-
-    except ConnectionException as exc:
-        logger.warning("Pagination error after %d posts: %s", count, exc)
-    except KeyboardInterrupt:
-        logger.info("Interrupted by user after %d posts", count)
+    if challenge_retries >= MAX_CHALLENGE_RETRIES and len(posts) < (limit or float("inf")):
+        logger.warning(t("collect_challenge_max_retries", count=MAX_CHALLENGE_RETRIES))
+        if progress_callback:
+            progress_callback("challenge_max_retries")
 
     return posts
 
@@ -286,57 +401,108 @@ def collect_reels(
     delay: float = 5.0,
     limit: int | None = None,
     progress_callback: Callable[[str], None] | None = None,
+    loader: instaloader.Instaloader | None = None,
 ) -> list[CollectedPost]:
-    """Collect reels from a profile. Returns partial results on pagination errors."""
-    reels: list[CollectedPost] = []
-    count = 0
+    """Collect reels from a profile.
 
-    try:
-        for reel in profile.get_reels():
-            if limit and count >= limit:
+    Returns partial results on pagination errors. Re-authenticates via
+    Playwright when a challenge is detected and *loader* is provided.
+    """
+    from markdown_frontmatterer.i18n import t
+
+    reels: list[CollectedPost] = []
+    collected_shortcodes: set[str] = set()
+    consecutive_errors = 0
+    challenge_retries = 0
+    username = profile.username
+
+    while True:  # Re-auth retry loop
+        try:
+            for reel in profile.get_reels():
+                if reel.shortcode in collected_shortcodes:
+                    continue
+                if limit and len(reels) >= limit:
+                    return reels
+
+                try:
+                    collected = CollectedPost(
+                        shortcode=reel.shortcode,
+                        author=username,
+                        date=reel.date_utc,
+                        caption=reel.caption or "",
+                        likes=reel.likes if isinstance(reel.likes, int) else 0,
+                        comments=reel.comments,
+                        is_video=True,
+                        video_url=str(reel.video_url),
+                        video_duration=getattr(reel, "video_duration", None),
+                        video_view_count=getattr(reel, "video_view_count", None),
+                        content_type="reel",
+                        hashtags=list(reel.caption_hashtags),
+                        mentions=list(reel.caption_mentions),
+                        media=[CollectedMedia(
+                            url=str(reel.video_url),
+                            filename=f"{reel.shortcode}.mp4",
+                            is_video=True,
+                        )],
+                    )
+                    reels.append(collected)
+                    collected_shortcodes.add(reel.shortcode)
+                    consecutive_errors = 0
+
+                    if progress_callback:
+                        progress_callback(f"reel:{reel.shortcode}")
+
+                    time.sleep(delay)
+
+                except QueryReturnedNotFoundException:
+                    logger.warning("Reel not found, skipping")
+                except ConnectionException as exc:
+                    consecutive_errors += 1
+                    if (
+                        consecutive_errors >= CONSECUTIVE_ERRORS_THRESHOLD
+                        and _is_challenge_error(exc)
+                        and loader
+                        and challenge_retries < MAX_CHALLENGE_RETRIES
+                    ):
+                        challenge_retries += 1
+                        logger.warning(
+                            "Challenge detected after %d reels (attempt %d/%d)",
+                            len(reels), challenge_retries, MAX_CHALLENGE_RETRIES,
+                        )
+                        _reauthenticate(loader, progress_callback)
+                        profile = Profile.from_username(loader.context, username)
+                        break
+                    elif consecutive_errors >= CONSECUTIVE_ERRORS_THRESHOLD and _is_challenge_error(exc):
+                        return reels
+                    else:
+                        logger.warning("Connection error on reel: %s", exc)
+                        time.sleep(delay * 3)
+            else:
                 break
 
-            try:
-                collected = CollectedPost(
-                    shortcode=reel.shortcode,
-                    author=profile.username,
-                    date=reel.date_utc,
-                    caption=reel.caption or "",
-                    likes=reel.likes if isinstance(reel.likes, int) else 0,
-                    comments=reel.comments,
-                    is_video=True,
-                    video_url=str(reel.video_url),
-                    video_duration=getattr(reel, "video_duration", None),
-                    video_view_count=getattr(reel, "video_view_count", None),
-                    content_type="reel",
-                    hashtags=list(reel.caption_hashtags),
-                    mentions=list(reel.caption_mentions),
-                    media=[CollectedMedia(
-                        url=str(reel.video_url),
-                        filename=f"{reel.shortcode}.mp4",
-                        is_video=True,
-                    )],
+        except ConnectionException as exc:
+            if _is_challenge_error(exc) and loader and challenge_retries < MAX_CHALLENGE_RETRIES:
+                challenge_retries += 1
+                logger.warning(
+                    "Reel pagination challenge after %d reels (attempt %d/%d)",
+                    len(reels), challenge_retries, MAX_CHALLENGE_RETRIES,
                 )
-                reels.append(collected)
-                count += 1
+                _reauthenticate(loader, progress_callback)
+                profile = Profile.from_username(loader.context, username)
+                continue
+            logger.warning("Reel pagination error after %d reels: %s", len(reels), exc)
+            break
+        except KeyboardInterrupt:
+            logger.info("Interrupted by user after %d reels", len(reels))
+            break
+        except AttributeError:
+            logger.info("get_reels() not available, skipping reels collection")
+            break
 
-                if progress_callback:
-                    progress_callback(f"reel:{reel.shortcode}")
-
-                time.sleep(delay)
-
-            except QueryReturnedNotFoundException:
-                logger.warning("Reel not found, skipping")
-            except ConnectionException as exc:
-                logger.warning("Connection error on reel: %s", exc)
-                time.sleep(delay * 3)
-
-    except ConnectionException as exc:
-        logger.warning("Reel pagination error after %d reels: %s", count, exc)
-    except KeyboardInterrupt:
-        logger.info("Interrupted by user after %d reels", count)
-    except AttributeError:
-        logger.info("get_reels() not available, skipping reels collection")
+    if challenge_retries >= MAX_CHALLENGE_RETRIES and len(reels) < (limit or float("inf")):
+        logger.warning(t("collect_challenge_max_retries", count=MAX_CHALLENGE_RETRIES))
+        if progress_callback:
+            progress_callback("challenge_max_retries")
 
     return reels
 
@@ -514,9 +680,13 @@ def run_collect(
 
     errors: list[str] = []
 
+    # Pass loader for re-auth only when browser auth is available
+    reauth_loader = loader if browser else None
+
     # Collect posts
     posts = collect_posts(
         profile, delay=delay, limit=limit, progress_callback=progress_callback,
+        loader=reauth_loader,
     )
 
     # Collect reels
@@ -525,6 +695,7 @@ def run_collect(
         try:
             reels = collect_reels(
                 profile, delay=delay, limit=limit, progress_callback=progress_callback,
+                loader=reauth_loader,
             )
         except Exception as exc:
             errors.append(f"reels: {exc}")
